@@ -8,7 +8,7 @@ import apiClient from '../config/axios';
  * Obtiene la lista paginada de todas las encuestas.
  */
 export const getEncuestas = (page = 1) => {
-  return apiClient.get(`/api/encuestas?page=${page}`);
+  return apiClient.get(`/encuestas?page=${page}`);
 };
 
 /**
@@ -16,12 +16,12 @@ export const getEncuestas = (page = 1) => {
  * @param {Object} datosEncuesta - { titulo, descripcion, etc. }
  */
 export const createEncuesta = (datosEncuesta) => {
-  return apiClient.post('/api/encuestas', datosEncuesta);
+  return apiClient.post('/encuestas', datosEncuesta);
 };
 
 
 export const updateEncuesta = (slug, datosEncuesta) => {
-  return apiClient.put(`/api/encuestas/${slug}`, datosEncuesta);
+  return apiClient.put(`/encuestas/${slug}`, datosEncuesta);
 };
 
 /**
@@ -29,21 +29,21 @@ export const updateEncuesta = (slug, datosEncuesta) => {
  * @param {number} id - El ID de la encuesta.
  */
 export const deleteEncuesta = (slug) => {
-  return apiClient.delete(`/api/encuestas/${slug}`);
+  return apiClient.delete(`/encuestas/${slug}`);
 };
 
 // --- Funciones para gestionar preguntas (ya las tenías y están bien) ---
 
 export const addPregunta = (encuestaId, preguntaData) => {
-  return apiClient.post(`/api/encuestas/${encuestaId}/preguntas`, preguntaData);
+  return apiClient.post(`/encuestas/${encuestaId}/preguntas`, preguntaData);
 }
 
 export const updatePregunta = (preguntaId, preguntaData) => {
-  return apiClient.put(`/api/preguntas/${preguntaId}`, preguntaData);
+  return apiClient.put(`/preguntas/${preguntaId}`, preguntaData);
 }
 
 export const deletePregunta = (preguntaId) => {
-  return apiClient.delete(`/api/preguntas/${preguntaId}`);
+  return apiClient.delete(`/preguntas/${preguntaId}`);
 }
 
 
@@ -55,7 +55,7 @@ export const deletePregunta = (preguntaId) => {
  * Obtiene los datos de una encuesta pública por su slug.
  */
 export const getSurveyBySlug = (slug) => {
-  return apiClient.get(`/api/surveys/${slug}`); 
+  return apiClient.get(`/surveys/${slug}`); 
 };
 
 /**
@@ -73,17 +73,17 @@ export const submitSurveyResponse = (slug, respuestas) => {
       formData.append(`respuestas[${preguntaId}]`, valor);
     }
   }
-  return apiClient.post(`/api/encuestas/${slug}/responses`, formData, {
+  return apiClient.post(`/encuestas/${slug}/responses`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
 
 export const searchUsers = (query) => {
-  return apiClient.get(`api/users/search?q=${query}`);
+  return apiClient.get(`/users/search?q=${query}`);
 };
 
 export const syncInvitados = (encuestaId, invitadosIds, emailListString) => {
-  return apiClient.post(`/api/encuestas/${encuestaId}/invitados`, { 
+  return apiClient.post(`/encuestas/${encuestaId}/invitados`, { 
     invitados: invitadosIds,
     emails: emailListString,
   })
@@ -92,7 +92,7 @@ export const syncInvitados = (encuestaId, invitadosIds, emailListString) => {
 
 export const getEncuestaForEditor = (slug) => {
   // Llama al endpoint de apiResource, no al público
-  return apiClient.get(`/api/editor/encuestas/${slug}`);
+  return apiClient.get(`/editor/encuestas/${slug}`);
 };
 
 

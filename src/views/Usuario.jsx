@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import useSWR from "swr";
 import { updateUser, deleteUser,createUser } from "../services/userService";
 import EditUserModal from "../components/EditUserModal"; // Importa el modal
 import apiClient from "../config/axios";
 import ConfirmDeleteModal from "../components/ConfirmDeleteModal";
 import useDebounce from '../hooks/useDebounce'; // Reutiliza el hook
-import { useNavigate } from "react-router-dom";
 
 // El "fetcher" ahora recibe la URL completa desde SWR
 const fetcher = (url) => apiClient.get(url).then(res => res.data);
@@ -14,7 +13,9 @@ export default function Usuario() {
   // --- LÓGICA DE DATOS Y ESTADO ---
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const navigate = useNavigate();
+  const [roleFilter, setRoleFilter] = useState(''); // Estado para el filtro de rol
+  const [sortBy, setSortBy] = useState('name'); // Columna de ordenamiento por defecto
+  const [sortDirection, setSortDirection] = useState('asc'); // Dirección por defecto
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -22,8 +23,43 @@ export default function Usuario() {
   
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  const swrKey = `/api/users?page=${page}&search=${debouncedSearchTerm}`;
+  // SWR Key ahora incluye el filtro de is_admin
+  const swrKey = `/users?page=${page}&search=${debouncedSearchTerm}&is_admin=${roleFilter}`;
   const { data, error, isLoading, mutate } = useSWR(swrKey, fetcher);
+
+  // --- EFECTOS ---
+  // Resetear la página a 1 cuando los filtros cambian
+  useEffect(() => {
+    setPage(1);
+  }, [roleFilter, debouncedSearchTerm]);
+
+
+  // --- LÓGICA DE ORDENAMIENTO (FRONTEND) ---
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedUsers = useMemo(() => {
+    if (!data?.data) return [];
+    
+    const sorted = [...data.data].sort((a, b) => {
+      if (a[sortBy] < b[sortBy]) return -1;
+      if (a[sortBy] > b[sortBy]) return 1;
+      return 0;
+    });
+
+    if (sortDirection === 'desc') {
+      return sorted.reverse();
+    }
+
+    return sorted;
+  }, [data, sortBy, sortDirection]);
+
 
   const handleEditClick = (user) => {
     setEditingUser(user);
@@ -40,36 +76,55 @@ export default function Usuario() {
     setIsDeleteModalOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (setError, setSuccessMessage) => {
     if (deletingUser) {
       try {
         await deleteUser(deletingUser.id);
+        setSuccessMessage('Usuario eliminado correctamente.');
         mutate(); // Refresca los datos
+
+        setTimeout(() => {
+          setIsDeleteModalOpen(false);
+          setDeletingUser(null);
+        }, 2000);
+
       } catch (err) {
         console.error("Error al eliminar el usuario", err);
-      } finally {
-        // Cierra el modal y limpia el estado
-        setIsDeleteModalOpen(false);
-        setDeletingUser(null);
+        setError('No se pudo eliminar el usuario. Es posible que tenga encuestas asociadas.');
       }
     }
   };
 
- const handleSave = async (userId, formData) => {
+ const handleSave = async (userId, formData, setErrors, setSuccessMessage) => {
     try {
+      let successMsg = '';
       if (userId) {
-        // Estamos editando un usuario existente
         await updateUser(userId, formData);
+        successMsg = 'Usuario actualizado correctamente.';
       } else {
-        // Estamos creando un nuevo usuario
         await createUser(formData);
+        successMsg = 'Usuario creado correctamente.';
       }
-      setIsModalOpen(false); // Cierra el modal
+      
+      // Éxito
+      setSuccessMessage(successMsg);
       mutate(); // Refresca la tabla
+
+      // Cierra el modal después de un par de segundos para que el usuario vea el mensaje
+      setTimeout(() => {
+        setIsModalOpen(false);
+        setEditingUser(null);
+      }, 2000);
+
     } catch (err) {
-      console.error("Error al guardar el usuario", err);
-      alert("No se pudo guardar el usuario. Revisa la consola.");
-      // Aquí podrías guardar los errores de validación en un estado para mostrarlos en el modal
+      if (err.response && err.response.status === 422) {
+        // Errores de validación
+        setErrors(err.response.data.errors);
+      } else {
+        // Otros errores
+        console.error("Error al guardar el usuario", err);
+        setErrors({ general: 'No se pudo guardar el usuario. Inténtalo de nuevo.' });
+      }
     }
   };
   // --- FIN DE LA LÓGICA ---
@@ -129,75 +184,59 @@ export default function Usuario() {
               </div>
             </div>
 
-            <div className="flex justify-between sm:justify-end mt-5 mb-5 mr-1">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar usuario or nombre o email..."
-                className="px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-1/3 w-full"
-              ></input>
+            <div className="flex flex-col sm:flex-row justify-between sm:justify-end mt-5 mb-5 mr-1 gap-4">
+                {/* Filtro de Rol */}
+                <select 
+                    value={roleFilter} 
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-auto"
+                >
+                    <option value="">Todos los Roles</option>
+                    <option value="1">Administradores</option>
+                    <option value="0">Usuarios</option>
+                </select>
+                {/* Barra de Búsqueda */}
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar por nombre o email..."
+                    className="px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-1/3 w-full"
+                />
             </div>
           </div>
           <div className="max-h-[400px] overflow-y-auto">
             <table className="w-full mt-4 text-left table-auto min-w-max">
               <thead className="sticky top-0 bg-slate-50 z-10">
                 <tr>
-                  <th className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
+                  <th onClick={() => handleSort('name')} className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
                     <p className="flex items-center justify-between gap-2 text-sm text-slate-500">
                       Nombre
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                        />
-                      </svg>
+                      {sortBy === 'name' && (
+                        <span className={sortDirection === 'asc' ? 'rotate-180' : ''}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                        </span>
+                      )}
                     </p>
                   </th>
-                  <th className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
+                  <th onClick={() => handleSort('email')} className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
                     <p className="flex items-center justify-between gap-2 text-sm text-slate-500">
                       Email
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                        />
-                      </svg>
+                      {sortBy === 'email' && (
+                        <span className={sortDirection === 'asc' ? 'rotate-180' : ''}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                        </span>
+                      )}
                     </p>
                   </th>
-                  <th className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
+                  <th onClick={() => handleSort('is_admin')} className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
                     <p className="flex items-center justify-between gap-2 text-sm text-slate-500">
                       Type
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className="w-4 h-4"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9"
-                        />
-                      </svg>
+                      {sortBy === 'is_admin' && (
+                        <span className={sortDirection === 'asc' ? 'rotate-180' : ''}>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                        </span>
+                      )}
                     </p>
                   </th>
                   <th className="p-4 border-y border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer">
@@ -209,7 +248,7 @@ export default function Usuario() {
               </thead>
 
               <tbody>
-                {data?.data.map(user => (
+                {sortedUsers.map(user => (
 
                 <tr key={user.id}>
                   <td className="p-4 border-b border-slate-200">

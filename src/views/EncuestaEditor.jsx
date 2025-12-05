@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid"; // Para generar IDs temporales únicos
-// Importa un nuevo componente que crearemos
 import { useNavigate, useParams } from "react-router-dom";
 import useSWR from "swr";
-import AsyncSelect from "react-select/async";
 import PreguntaEditor from "../components/PreguntaEditor";
 import useAutosizeTextarea from "../hooks/useAutosizeTextarea";
+import useOnClickOutside from "../hooks/useOnClickOutside";
 
 import {
   getEncuestaForEditor,
@@ -26,7 +25,7 @@ import {
 } from "@dnd-kit/core";
 
 import {
-  restrictToVerticalAxis, // 1. Importa el modificador
+  restrictToVerticalAxis,
 } from '@dnd-kit/modifiers';
 
 import {
@@ -35,92 +34,84 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import AsyncSelect from "react-select/async";
+import useAuth from "../hooks/useAuth";
 
 // El fetcher ahora usa la nueva función del servicio
 const fetcher = (slug) => getEncuestaForEditor(slug).then((res) => res.data);
-// Función auxiliar para obtener la fecha de hoy en formato YYYY-MM-DD
-const getTodayString = () => {
+
+const getFutureDateString = (daysToAdd) => {
   const today = new Date();
+  today.setDate(today.getDate() + daysToAdd);
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
   const day = String(today.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
 
+const questionTypes = [
+    { type: 'opcion_unica', label: 'Opción Múltiple', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+    { type: 'texto_corto', label: 'Respuesta Corta', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" /></svg> },
+    { type: 'texto_largo', label: 'Párrafo', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg> },
+    { type: 'escala', label: 'Escala Lineal', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" /></svg> },
+    { type: 'seccion', label: 'Añadir Sección', icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg> },
+  ];
 
 export default function EncuestaEditor() {
+    const { user } = useAuth();
+
+  if (!user?.is_admin) {
+    return 'No tienes los permisos suficientes';
+  }
 
   const [errors, setErrors] = useState({});
-
-  const { slug } = useParams(); // Obtenemos el slug si estamos editando
-
+  const { slug } = useParams();
   const isEditing = !!slug;
   const navigate = useNavigate();
-  // Si hay un slug, carga los datos de la encuesta existente
-  const {
-    data: encuestaData,
-    isLoading,
-    error,
-  } = useSWR(isEditing ? slug : null, fetcher, {
-    // --- AÑADE ESTAS OPCIONES ---
-    shouldRetryOnError: false, // No reintentar si la petición falla
-    revalidateOnFocus: false, // No volver a pedir los datos al cambiar de pestaña
+
+  const { data: encuestaData, isLoading, error, mutate } = useSWR(isEditing ? slug : null, fetcher, {
+    shouldRetryOnError: false,
+    revalidateOnFocus: false,
   });
 
   const [titulo, setTitulo] = useState("Encuesta Sin Título");
   const [descripcion, setDescripcion] = useState("");
-  const [saveStatus, setSaveStatus] = useState([]);
+  const [saveStatus, setSaveStatus] = useState({ loading: false, message: '' });
   const [preguntas, setPreguntas] = useState([]);
   const [esPublica, setEsPublica] = useState(true);
-  const [fechaInicio, setFechaInicio] = useState(getTodayString());
-  const [fechaTermino, setFechaTermino] = useState('');
+  const [fechaInicio, setFechaInicio] = useState(isEditing ? '' : getFutureDateString(2));
+  const [fechaTermino, setFechaTermino] = useState(isEditing ? '' : getFutureDateString(4));
   const [invitados, setInvitados] = useState([]);
-  const [emailList, setEmailList] = useState(""); // Nuevo estado para el textarea
-  // 1. Nuevo estado para guardar el ID de la pregunta activa
+  const [emailList, setEmailList] = useState("");
   const [activeQuestionId, setActiveQuestionId] = useState(null);
-  // 2. Usa el hook para cada campo. ¡La lógica de useEffect desaparece de aquí!
+  const [isAddMenuOpen, setAddMenuOpen] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  const addMenuRef = useRef(null);
+  useOnClickOutside(addMenuRef, () => setAddMenuOpen(false));
+
   const tituloRef = useAutosizeTextarea(titulo);
   const descripcionRef = useAutosizeTextarea(descripcion);
   const formRef = useRef(null);
 
-
   const sensors = useSensors(
     useSensor(PointerSensor),
-    useSensor(TouchSensor, {
-      // Presiona y mantén por 100ms (más rápido que el default)
-      // y permite un pequeño movimiento del dedo (5px) antes de cancelar.
-      activationConstraint: {
-        delay: 1000,
-        tolerance: 20,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(TouchSensor, { activationConstraint: { delay: 1000, tolerance: 20 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
   const handleDragEnd = (event) => {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
       setPreguntas((items) => {
         const oldIndex = items.findIndex((item) => item.id === active.id);
         const newIndex = items.findIndex((item) => item.id === over.id);
-
-        // 1. Reordena el array
         const newArray = arrayMove(items, oldIndex, newIndex);
-
-        // 2. Actualiza el campo 'orden' para cada pregunta
-        return newArray.map((pregunta, index) => ({
-          ...pregunta,
-          orden: index + 1,
-        }));
+        return newArray.map((pregunta, index) => ({ ...pregunta, orden: index + 1 }));
       });
     }
   };
-  // useEffect que se activa cuando el array de preguntas cambia
 
-
-  // useEffect para poblar el formulario cuando los datos de la encuesta se cargan (en modo edición)
   useEffect(() => {
     if (encuestaData) {
       setTitulo(encuestaData.titulo);
@@ -130,106 +121,76 @@ export default function EncuestaEditor() {
       setFechaInicio(encuestaData.fecha_inicio || '');
       setFechaTermino(encuestaData.fecha_termino || '');
       const invitadosData = encuestaData.usuarios_invitados || [];
-      setInvitados(
-        invitadosData.map((user) => ({
-          value: user.id,
-          label: `${user.name} (${user.email})`,
-        }))
-      );
-      // Poblar el textarea con los correos de invitaciones pendientes
+      setInvitados(invitadosData.map((user) => ({ value: user.id, label: `${user.name} (${user.email})` })));
       const emailsPendientes = encuestaData.invitaciones || [];
       setEmailList(emailsPendientes.map((inv) => inv.email).join("\n"));
     }
   }, [encuestaData, isEditing]);
 
-  // Función para buscar usuarios para el selector
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
+
   const loadOptions = (inputValue, callback) => {
     if (inputValue.length < 2) {
       callback([]);
       return;
     }
     searchUsers(inputValue).then((res) => {
-      const options = res.data.map((user) => ({
-        value: user.id,
-        label: `${user.name} (${user.email})`,
-      }));
+      const options = res.data.map((user) => ({ value: user.id, label: `${user.name} (${user.email})` }));
       callback(options);
     });
   };
 
   const agregarPregunta = (tipo) => {
-  const nuevoId = uuidv4();
-  
-  // Determinamos si el tipo de pregunta necesita opciones
-  const necesitaOpciones = ['opcion_unica', 'opcion_multiple', 'desplegable'].includes(tipo);
-
-  const nuevaPregunta = {
-    id: nuevoId,
-    tipo: tipo,
-    orden: preguntas.length + 1,
-    es_requerido: false,
-
-    // --- LÓGICA CORREGIDA Y UNIFICADA ---
-    
-    // Si el tipo es 'seccion', 'pregunta' es null. Si no, es un string vacío.
-    pregunta: tipo !== 'seccion' ? '' : null,
-    
-    // Solo crea el array de opciones si el tipo lo necesita
-    opciones: necesitaOpciones ? [{ id: uuidv4(), opcion_texto: "Opción 1", orden: 1 }] : [],
-    
-    
-    
-    // Valores por defecto para escala
-    escala_max: tipo === 'escala' ? 5 : null,
-    escala_label_inicio: tipo === 'escala' ? '' : null,
-    escala_label_fin: tipo === 'escala' ? '' : null,
-
-    // Valores por defecto para sección
-    titulo_seccion: tipo === 'seccion' ? '' : null,
-    descripcion_seccion: tipo === 'seccion' ? '' : null,
+    const nuevoId = uuidv4();
+    const necesitaOpciones = ['opcion_unica', 'opcion_multiple', 'desplegable'].includes(tipo);
+    const nuevaPregunta = {
+      id: nuevoId,
+      tipo: tipo,
+      orden: preguntas.length + 1,
+      es_requerido: false,
+      pregunta: tipo !== 'seccion' ? '' : null,
+      opciones: necesitaOpciones ? [{ id: uuidv4(), opcion_texto: "Opción 1", orden: 1 }] : [],
+      escala_max: tipo === 'escala' ? 5 : null,
+      escala_label_inicio: tipo === 'escala' ? '' : null,
+      escala_label_fin: tipo === 'escala' ? '' : null,
+      titulo_seccion: tipo === 'seccion' ? '' : null,
+      descripcion_seccion: tipo === 'seccion' ? '' : null,
+    };
+    setPreguntas(prevPreguntas => [...prevPreguntas, nuevaPregunta]);
+    setActiveQuestionId(nuevoId);
+    setAddMenuOpen(false);
   };
 
-  setPreguntas(prevPreguntas => [...prevPreguntas, nuevaPregunta]);
-  console.log(preguntas);
-  setActiveQuestionId(nuevoId);
-};
-
   const actualizarPregunta = (id, campo, valor) => {
-  setPreguntas(preguntas.map(p => {
-    if (p.id === id) {
-      const preguntaActualizada = { ...p, [campo]: valor };
-
-      // Si el campo que se está cambiando es el 'tipo'...
-      if (campo === 'tipo') {
-        const tiposConOpciones = ['opcion_unica', 'opcion_multiple', 'desplegable'];
-        const nuevoTipoNecesitaOpciones = tiposConOpciones.includes(valor);
-        const tipoAnteriorTeníaOpciones = tiposConOpciones.includes(p.tipo);
-
-        // --- LÓGICA DE LIMPIEZA ---
-        // Si el tipo anterior tenía opciones Y el nuevo tipo NO las necesita,
-        // entonces limpiamos el array de opciones.
-        if (tipoAnteriorTeníaOpciones && !nuevoTipoNecesitaOpciones) {
-          preguntaActualizada.opciones = [];
+    setPreguntas(preguntas.map(p => {
+      if (p.id === id) {
+        const preguntaActualizada = { ...p, [campo]: valor };
+        if (campo === 'tipo') {
+          const tiposConOpciones = ['opcion_unica', 'opcion_multiple', 'desplegable'];
+          const nuevoTipoNecesitaOpciones = tiposConOpciones.includes(valor);
+          const tipoAnteriorTeníaOpciones = tiposConOpciones.includes(p.tipo);
+          if (tipoAnteriorTeníaOpciones && !nuevoTipoNecesitaOpciones) {
+            preguntaActualizada.opciones = [];
+          }
+          if (nuevoTipoNecesitaOpciones && p.opciones.length === 0) {
+            preguntaActualizada.opciones = [{ id: uuidv4(), opcion_texto: "Opción 1", orden: 1 }];
+          }
+          if (valor === 'escala') {
+            preguntaActualizada.escala_max = p.escala_max || 5;
+          }
         }
-        
-        // Si el nuevo tipo necesita opciones y no las tiene, se las añadimos.
-        if (nuevoTipoNecesitaOpciones && p.opciones.length === 0) {
-          preguntaActualizada.opciones = [{ id: uuidv4(), opcion_texto: "Opción 1", orden: 1 }];
-        }
-        
-        // Si el nuevo tipo es 'escala', le ponemos el default.
-        if (valor === 'escala') {
-          preguntaActualizada.escala_max = p.escala_max || 5;
-        }
+        return preguntaActualizada;
       }
-      
-      return preguntaActualizada;
-    }
-    return p;
-  }));
-};
+      return p;
+    }));
+  };
+
   const handleSaveClick = () => {
-    // 3. Simula un envío del formulario
     if (formRef.current) {
       formRef.current.requestSubmit();
     }
@@ -239,48 +200,38 @@ export default function EncuestaEditor() {
     setPreguntas(preguntas.filter((p) => p.id !== id));
   };
 
-  // Faltarían funciones para manejar opciones...
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaveStatus({ loading: true, message: "" }); // Inicia el estado de carga
-
-    // Preparamos los datos para enviar a la API
+    setSaveStatus({ loading: true, message: "" });
     const payload = {
       titulo,
       descripcion,
-      es_publica: esPublica, // Puedes añadir un campo en el form para esto
-      fecha_inicio: fechaInicio || null, // Envía null si está vacío
+      es_publica: esPublica,
+      fecha_inicio: fechaInicio || null,
       fecha_termino: fechaTermino || null,
       preguntas: preguntas.map((p) => ({
-        // Omitimos los IDs temporales que no son números (los de UUID)
         ...(!isNaN(p.id) && { id: p.id }),
         pregunta: p.pregunta,
         tipo: p.tipo,
         es_requerido: p.es_requerido,
-        // --- AÑADIMOS LOS CAMPOS FALTANTES DE LA ESCALA ---
         escala_max: p.escala_max || null,
         escala_label_inicio: p.escala_label_inicio || null,
         escala_label_fin: p.escala_label_fin || null,
         titulo_seccion: p.titulo_seccion || null,
         descripcion_seccion: p.descripcion_seccion || null,
         orden: p.orden,
-        opciones: p.opciones.map((opt) => ({
-          ...(!isNaN(opt.id) && { id: opt.id }),
-          opcion_texto: opt.opcion_texto,
-        })),
+        opciones: p.opciones.map((opt) => ({ ...(!isNaN(opt.id) && { id: opt.id }), opcion_texto: opt.opcion_texto })),
       })),
     };
 
     try {
       let encuestaGuardada;
       let successMessage = '';
-
-      // Tu lógica para guardar o actualizar la encuesta principal (esto está perfecto)
       if (slug) {
         const response = await updateEncuesta(slug, payload);
         encuestaGuardada = response.data;
         successMessage = '¡Encuesta actualizada con éxito!';
+        mutate(); // Revalida los datos de SWR
       } else {
         const response = await createEncuesta(payload);
         encuestaGuardada = response.data;
@@ -288,86 +239,73 @@ export default function EncuestaEditor() {
       }
 
       const encuestaId = encuestaGuardada.id;
-
-      // --- LÓGICA DE INVITADOS UNIFICADA ---
       if (!esPublica) {
-        // 2. Prepara los datos de ambas fuentes
         const invitadosIds = invitados.map((inv) => inv.value);
-
-        // 3. Llama a UNA SOLA función de servicio que envía todo
         await syncInvitados(encuestaId, invitadosIds, emailList);
-
       } else {
-        // 4. Si la encuesta se cambia a pública, limpiamos la lista de invitados
         await syncInvitados(encuestaId, [], "");
       }
-      // --- NAVEGACIÓN CON MENSAJE ---
-    // Redirigimos a la lista de encuestas y le pasamos el mensaje
-    navigate("/encuestas", { state: { message: successMessage } });
+
+      setSaveStatus({ loading: false, message: successMessage });
+      showToast(successMessage, 'success');
+
+      if (!isEditing) {
+        navigate(`/encuestas/${encuestaGuardada.slug}/editar`, { replace: true });
+      }
+
     } catch (error) {
       if (error.response && error.response.status === 422) {
-        // 2. Guardamos el objeto de errores de Laravel en el estado
         setErrors(error.response.data.errors);
+        showToast('Hay errores de validación en el formulario.', 'error');
+      } else {
+        showToast('Ocurrió un error inesperado al guardar.', 'error');
       }
       console.error("Error al guardar la encuesta:", error);
-      // 6. Mostramos un mensaje de error en la UI
-      setSaveStatus({
-        loading: false,
-        message: "No se pudo guardar. Revisa los errores en los campos.",
-      });
+      setSaveStatus({ loading: false, message: "No se pudo guardar." });
     }
   };
 
-  const handleTitleKeyDown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-    }
-  };
+
   if (isLoading) return <p>Cargando editor...</p>;
-  if (error)
-    return (
-      <p>
-        No se puede cargar la encuesta o no tienes permiso para realizar esta
-        accion...
-      </p>
-    );
+  if (error) return <p>No se puede cargar la encuesta o no tienes permiso para realizar esta accion...</p>;
 
-  // En src/views/EncuestaEditor.jsx
   const sePuedenEditarPreguntas = !isEditing || (encuestaData?.respuestas_count === 0);
 
   return (
     <div className="max-w-4xl mx-auto p-8 bg-gray-100 min-h-screen">
+        {toast.show && (
+            <div
+                className={`fixed top-24 right-5 p-4 rounded-lg shadow-lg text-white transition-all duration-300 z-50 ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
+                {toast.message}
+            </div>
+        )}
+
       <h1 className="text-3xl font-bold mb-6 text-gray-800">
         {slug ? "Editar Encuesta" : "Crear Nueva Encuesta"}
       </h1>
 
-      <form ref={formRef} onSubmit={handleSubmit}>
+      <form ref={formRef} onSubmit={handleSubmit} className="pb-1"> {/* Aumentado el padding inferior */}
         {/* --- TARJETA DE DETALLES PRINCIPALES --- */}
         <div className="bg-white p-6 rounded-lg shadow-md border-t-8 border-blue-600">
           <textarea
             ref={tituloRef}
             value={titulo}
-            onFocus={() => showToolbar("titulo", tituloRef)}
-            onKeyDown={handleTitleKeyDown}
             onChange={(e) => setTitulo(e.target.value)}
             className="text-3xl font-bold w-full border-b py-2 outline-none focus:border-blue-500 transition-colors resize-none overflow-hidden"
             placeholder="Título de la Encuesta"
             required
           />
-
           <textarea
-            ref={descripcionRef} // 4. Asigna la referencia al elemento
+            ref={descripcionRef}
             value={descripcion}
-            onFocus={() => showToolbar("descripcion", descripcionRef)}
             onChange={(e) => setDescripcion(e.target.value)}
             className="text-gray-600 mt-4 w-full border-b py-2 outline-none focus:border-blue-600 transition-colors resize-none overflow-hidden"
             placeholder="Descripción de la encuesta"
-            rows="1" // Le decimos que empiece con una sola fila de altura
+            rows="1"
           />
-          {/* --- NUEVOS CAMPOS DE FECHA --- */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label htmlFor="fecha_inicio" className="block text-sm font-medium text-gray-700">Fecha de Inicio (Opcional)</label>
+              <label htmlFor="fecha_inicio" className="block text-sm font-medium text-gray-700">Fecha de Inicio</label>
               <input
                 type="date"
                 id="fecha_inicio"
@@ -377,7 +315,7 @@ export default function EncuestaEditor() {
               />
             </div>
             <div>
-              <label htmlFor="fecha_termino" className="block text-sm font-medium text-gray-700">Fecha de Término (Opcional)</label>
+              <label htmlFor="fecha_termino" className="block text-sm font-medium text-gray-700">Fecha de Término</label>
               <input
                 type="date"
                 id="fecha_termino"
@@ -388,34 +326,19 @@ export default function EncuestaEditor() {
             </div>
           </div>
           {errors.fecha_inicio && <p className="text-red-500 text-sm mt-2 uppercase">{errors.fecha_inicio}</p>}
-
-          {/* --- INTERRUPTOR PÚBLICA/PRIVADA --- */}
           <div className="mt-6 flex items-center justify-end">
-            <span
-              className={`mr-3 font-semibold ${!esPublica ? "text-blue-600" : "text-gray-400"
-                }`}
-            >
+            <span className={`mr-3 font-semibold ${!esPublica ? "text-blue-600" : "text-gray-400"}`}>
               Privada
             </span>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={esPublica}
-                onChange={() => setEsPublica(!esPublica)}
-              />
+              <input type="checkbox" className="sr-only peer" checked={esPublica} onChange={() => setEsPublica(!esPublica)} />
               <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
-            <span
-              className={`ml-3 font-semibold ${esPublica ? "text-blue-600" : "text-gray-400"
-                }`}
-            >
+            <span className={`ml-3 font-semibold ${esPublica ? "text-blue-600" : "text-gray-400"}`}>
               Pública
             </span>
           </div>
         </div>
-
-        {/* --- SECCIÓN PARA AÑADIR INVITADOS (SI ES PRIVADA) --- */}
         {!esPublica && (
           <div className="bg-white p-6 rounded-lg shadow-md mt-6">
             <h3 className="text-xl font-bold mb-2 text-gray-800">
@@ -436,6 +359,11 @@ export default function EncuestaEditor() {
                 placeholder="Buscar y seleccionar usuarios..."
                 styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                 menuPortalTarget={document.body}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
               />
             </div>
             <div className="mt-6">
@@ -455,89 +383,100 @@ export default function EncuestaEditor() {
             </div>
           </div>
         )}
-        {isEditing && !sePuedenEditarPreguntas && (
-          <div className="bg-yellow-100 text-yellow-800 p-4 rounded-md mt-6">
-            <strong>Atención:</strong> Esta encuesta ya tiene respuestas. Solo puedes editar el título, la descripción y las fechas. La estructura de preguntas está bloqueada.
-          </div>
-        )}
-      {sePuedenEditarPreguntas && (
-        <>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToVerticalAxis]}
-        >
-          <SortableContext
-            items={preguntas}
-            strategy={verticalListSortingStrategy}
-          >
-            {/* Mapeo de las preguntas ahora usa el componente Sortable */}
-            {preguntas.map((pregunta, index) => {
-              // 1. Construimos un objeto con todos los errores de esta pregunta
-              const preguntaErrors = {
-                pregunta: errors[`preguntas.${index}.pregunta`]?.[0],
-                opciones: errors[`preguntas.${index}.opciones`]?.[0],
-                escala_max: errors[`preguntas.${index}.escala_max`]?.[0],
-                // ... puedes añadir más aquí si es necesario
-              };
 
-              return (
-                <PreguntaEditor
-                  key={pregunta.id}
-                  pregunta={pregunta}
-                  onUpdate={actualizarPregunta}
-                  onDelete={eliminarPregunta}
-                  // 2. Pasamos el objeto de errores completo
-                  errors={preguntaErrors}
-                  isActive={pregunta.id === activeQuestionId}
-                  setActive={() => setActiveQuestionId(pregunta.id)}
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
-
+        {/* ... (resto del formulario) ... */}
         
+      {sePuedenEditarPreguntas ? (
+        <>
+          {preguntas.length > 0 ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd} modifiers={[restrictToVerticalAxis]}>
+              <SortableContext items={preguntas} strategy={verticalListSortingStrategy}>
+                {preguntas.map((pregunta, index) => {
+                  const preguntaErrors = {
+                    pregunta: errors[`preguntas.${index}.pregunta`]?.[0],
+                    opciones: errors[`preguntas.${index}.opciones`]?.[0],
+                    escala_max: errors[`preguntas.${index}.escala_max`]?.[0],
+                    titulo_seccion: errors[`preguntas.${index}.titulo_seccion`]?.[0],
+                    descripcion_seccion: errors[`preguntas.${index}.descripcion_seccion`]?.[0],
+                  };
+                  return (
+                    <PreguntaEditor
+                      key={pregunta.id}
+                      pregunta={pregunta}
+                      onUpdate={actualizarPregunta}
+                      onDelete={eliminarPregunta}
+                      errors={preguntaErrors}
+                      isActive={pregunta.id === activeQuestionId}
+                      setActive={() => setActiveQuestionId(pregunta.id)}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            <div className="text-center py-16 bg-white rounded-lg shadow-md mt-6 border-2 border-dashed">
+              <h3 className="text-xl font-semibold text-gray-700">Aún no hay preguntas</h3>
+              <p className="text-gray-500 mt-2">¡Usa el botón `+` para empezar a construir tu encuesta!</p>
+            </div>
+          )}
         </>
+      ) : (
+        isEditing && (
+            <div className="bg-yellow-100 text-yellow-800 p-4 rounded-md mt-6">
+                <strong>Atención:</strong> Esta encuesta ya tiene respuestas. Solo puedes editar el título, la descripción y las fechas. La estructura de preguntas está bloqueada.
+            </div>
+        )
       )}
       </form>
-      {/* --- BARRA DE HERRAMIENTAS RESPONSIVA --- */}
-        <div className="mt-6 p-4 bg-white rounded-lg shadow-md flex justify-between items-center sticky bottom-4 ">
-          {sePuedenEditarPreguntas && (
-          <div className=" lg:flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => agregarPregunta("opcion_unica")}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={1.5}
-                stroke="currentColor"
-                className="size-12"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                />
-              </svg>
-            </button>
 
-          </div>
-          )}
+      {/* --- BARRA DE HERRAMIENTAS INFERIOR --- */}
+      <div className="mt-6 p-4 bg-white rounded-lg shadow-md flex justify-between items-center sticky bottom-4">
+   
+          {/* Lado Izquierdo: Menú para Añadir Pregunta */}
+          {sePuedenEditarPreguntas ? (
+            <div ref={addMenuRef} className="relative">
+              {/* Menú desplegable hacia arriba */}
+              <div className={`absolute bottom-full mb-2 w-64 rounded-lg shadow-xl bg-white border border-gray-200 transition-all duration-300 origin-bottom-left ${isAddMenuOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-90 pointer-events-none'}`}>
+                <div className="p-2 space-y-1">
+                  {questionTypes.map(({ type, label, icon }) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => agregarPregunta(type)}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
+                    >
+                      {icon}
+                      <span className="font-medium text-sm">{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Botón principal para abrir/cerrar menú */}
+              <button
+                type="button"
+                onClick={() => setAddMenuOpen(prev => !prev)}
+                className={`w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-all duration-300 transform ${isAddMenuOpen ? 'rotate-45' : ''}`}
+                aria-label="Añadir nueva pregunta"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </button>
+            </div>
+          ) : <div/> /* Espaciador para mantener el botón de guardar a la derecha */}
+
+          {/* Lado Derecho: Botón de Guardar */}
           <button
             type="button"
             onClick={handleSaveClick}
-            disabled={saveStatus.loading} // Deshabilita el botón si está cargando
-            className="px-6 py-2 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700"
+            disabled={saveStatus.loading || preguntas.length === 0}
+            className="px-6 py-3 bg-blue-600 text-white font-bold rounded-lg shadow hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {/* {isEditing ? "Guardar Cambios" : "Crear Encuesta"} */}
-              {saveStatus.loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Crear Encuesta')}
+            {saveStatus.loading ? 'Guardando...' : (isEditing ? 'Guardar Cambios' : 'Crear Encuesta')}
           </button>
-        </div>
+        
+      </div>
     </div>
   );
 }

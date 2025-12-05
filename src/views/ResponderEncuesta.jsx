@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useSWR from 'swr';
-import { useParams, useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { getSurveyBySlug, submitSurveyResponse } from '../services/encuestaService';
 import useAuth from '../hooks/useAuth';
 import Alerta from '../components/Alerta'; // Asumo que tienes este componente
@@ -13,7 +13,6 @@ export default function ResponderEncuesta() {
   const location = useLocation(); // Para recordar a dónde volver
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === 'true';
-  const navigate = useNavigate();
   const { data: encuesta, error, isLoading: isSurveyLoading } = useSWR(slug, fetcher);
   const [respuestas, setRespuestas] = useState({});
   const [errores, setErrores] = useState({}); // Estado para errores de validación

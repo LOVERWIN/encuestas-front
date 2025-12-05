@@ -11,5 +11,5 @@ export default function Encuesta() {
 
   // Si el usuario es admin, muestra la tabla de administración.
   // Si no, muestra la lista de encuestas para responder.
-  return user?.is_admin ? <AdminEncuestas /> : <UserEncuestas />;
+  return user?.is_admin ? <AdminEncuestas/> : <UserEncuestas />;
 }

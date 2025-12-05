@@ -1,14 +1,16 @@
-import { createContext } from "react"
-//creamos el canal de comunicacion
-const  SistemaEncuestaContext = createContext();
+import { createContext, useState } from "react";
+
+const SistemaEncuestaContext = createContext();
 
 const SistemaEncuestaProvider = ({children}) => {
     
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     
     return(
         <SistemaEncuestaContext.Provider
             value={{
-
+                isSidebarOpen,
+                setIsSidebarOpen
             }}
         >{children}</SistemaEncuestaContext.Provider>
     )

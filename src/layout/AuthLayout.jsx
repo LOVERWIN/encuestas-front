@@ -1,10 +1,12 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
+import { useRef } from "react";
 
 export default function AuthLayout() {
   //Verificamos autentication para validar las rutas
-  const { user, error, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
   const location = useLocation(); // Obtiene la información de la ruta
+  const redirectHandled = useRef(false);
 
   // Este useEffect se encargará de redirigir a los usuarios logueados
   // 1. Esperamos a saber si hay usuario o no
@@ -13,6 +15,12 @@ export default function AuthLayout() {
   }
 
   if (user) {
+    const loggedOutFlag = localStorage.getItem('logged_out_flag');
+    if (loggedOutFlag && !redirectHandled.current) {
+      localStorage.removeItem('logged_out_flag');
+      redirectHandled.current = true;
+      return <Navigate to="/" replace />;
+    }
     const from = location.state?.from?.pathname || '/';
     return <Navigate to={from} replace />;
   }

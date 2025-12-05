@@ -1,7 +1,7 @@
 // src/hooks/useAutosizeTextarea.js
 import { useEffect, useRef } from 'react';
 
-export default function useAutosizeTextarea(value) {
+export default function useAutosizeTextarea(value, isActive) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -10,7 +10,7 @@ export default function useAutosizeTextarea(value) {
       textarea.style.height = 'auto'; // Resetea para que pueda encogerse
       textarea.style.height = `${textarea.scrollHeight}px`; // Ajusta a la altura del contenido
     }
-  }, [value]); // Se ejecuta cada vez que el valor del textarea cambia
+  }, [value, isActive]); // Se ejecuta cuando el valor o el estado de activación cambian
 
   return ref; // Devuelve la referencia para asignarla al elemento
 }

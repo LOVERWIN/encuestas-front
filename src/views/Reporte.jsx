@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import apiClient from "../config/axios";
 import { Link } from "react-router-dom";
@@ -7,23 +7,29 @@ import useDebounce from '../hooks/useDebounce'; // Un hook que crearemos
 
 const fetcher = (url) => apiClient.get(url).then((res) => res.data);
 export default function Reporte() {
+  const { user } = useAuth();
   // --- ESTADOS PARA LOS FILTROS ---
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState(""); // Para la fecha de inicio
   const [endDate, setEndDate] = useState(""); // Para la fecha de término
+  const [typeFilter, setTypeFilter] = useState(''); // publica, privada
+  const [statusFilter, setStatusFilter] = useState(''); // activa, finalizada
+
   // 1. Nuevo estado para saber qué enlace se ha copiado
   const [copiedSlug, setCopiedSlug] = useState(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, startDate, endDate, typeFilter, statusFilter]);
 
-  const { user } = useAuth();
+  const swrKey = user?.is_admin ? `/reportes/listado-encuestas?page=${page}&search=${debouncedSearchTerm}&start_date=${startDate}&end_date=${endDate}&tipo=${typeFilter}&estado=${statusFilter}` : null;
+  const { data, error, isLoading } = useSWR(swrKey, fetcher);
+
   if (!user?.is_admin) {
     return 'No tienes los permisos suficientes';
   }
-
-  const swrKey = `/api/encuestas?page=${page}&search=${debouncedSearchTerm}&start_date=${startDate}&end_date=${endDate}`;
-  const { data, error, isLoading } = useSWR(swrKey, fetcher);
 
   
   const handleCopyLink = (slug) => {
@@ -37,7 +43,6 @@ export default function Reporte() {
 
   if (isLoading) return <p>Cargando encuestas...</p>;
   if (error) return <p>No se pudieron cargar las encuestas.</p>;
-
   return (
     <div className="max-w-7xl mx-auto p-8">
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -45,14 +50,24 @@ export default function Reporte() {
       </div>
 
       {/* --- CONTENEDOR DE FILTROS --- */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
         <input
           type="text"
           placeholder="Buscar por título..."
-          className="px-4 py-2 rounded-lg border w-full md:w-1/3"
+          className="px-4 py-2 rounded-lg border w-full"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="px-4 py-2 rounded-lg border w-full">
+            <option value="">Todo Tipo</option>
+            <option value="1">Públicas</option>
+            <option value="0">Privadas</option>
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-4 py-2 rounded-lg border w-full">
+            <option value="">Todo Estado</option>
+            <option value="activa">Activas</option>
+            <option value="finalizada">Finalizadas</option>
+        </select>
         <div className="flex items-center gap-2">
           <label htmlFor="startDate" className="text-sm text-gray-600">
             Desde:
@@ -60,7 +75,7 @@ export default function Reporte() {
           <input
             id="startDate"
             type="date"
-            className="px-4 py-2 rounded-lg border"
+            className="px-4 py-2 rounded-lg border w-full"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
           />
@@ -72,7 +87,7 @@ export default function Reporte() {
           <input
             id="endDate"
             type="date"
-            className="px-4 py-2 rounded-lg border"
+            className="px-4 py-2 rounded-lg border w-full"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
           />
@@ -93,14 +108,24 @@ export default function Reporte() {
             <div>
               <div className="flex justify-between items-start mb-2">
                 <h2 className="text-lg font-bold text-gray-800 pr-2">{encuesta.titulo}</h2>
-                <span
-                  className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${encuesta.es_publica
-                      ? "bg-green-100 text-green-800"
-                      : "bg-yellow-100 text-yellow-800"
-                    }`}
-                >
-                  {encuesta.es_publica ? "Pública" : "Privada"}
-                </span>
+                <div className="flex gap-2 items-center">
+                  <span
+                    className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${encuesta.es_publica
+                        ? "bg-green-100 text-green-800"
+                        : "bg-yellow-100 text-yellow-800"
+                      }`}
+                  >
+                    {encuesta.es_publica ? "Pública" : "Privada"}
+                  </span>
+                  <span
+                    className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${encuesta.estado === 'activa'
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-red-100 text-red-800"
+                      }`}
+                  >
+                    {encuesta.estado === 'activa' ? "Activa" : "Finalizada"}
+                  </span>
+                </div>
               </div>
               <p className="text-gray-600 text-sm mb-4 h-10 overflow-hidden">
                 {encuesta.descripcion}
@@ -108,10 +133,16 @@ export default function Reporte() {
             </div>
             {/* --- SECCIÓN DE METADATOS (con la fecha) --- */}
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="text-sm text-gray-500">
-                <span>Creada el: </span>
-                <strong>{new Date(encuesta.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>
-              </div>
+                <div className="flex justify-between text-sm text-gray-500">
+                    <div>
+                        <span>Creada el: </span>
+                        <strong>{new Date(encuesta.created_at).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}</strong>
+                    </div>
+                    <div>
+                        <span>Respuestas: </span>
+                        <strong className="text-gray-700">{encuesta.total_respuestas ?? 0}</strong>
+                    </div>
+                </div>
             </div>
             {/* --- SECCIÓN DE ACCIONES --- */}
             <div className="mt-6 flex gap-3">

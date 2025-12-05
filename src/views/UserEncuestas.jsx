@@ -12,7 +12,7 @@ export default function UserEncuestas() {
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
  // La clave de SWR ahora incluye la paginación y la búsqueda
-  const swrKey = `/api/encuestas-disponibles?page=${page}&search=${debouncedSearchTerm}`;
+  const swrKey = `/encuestas-disponibles?page=${page}&search=${debouncedSearchTerm}`;
   const { data, error, isLoading } = useSWR(swrKey, fetcher);
 
 

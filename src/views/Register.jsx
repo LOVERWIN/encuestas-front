@@ -12,10 +12,12 @@ export default function Register() {
   const [password_confirmation, setPassword_confirmation] = useState("");
   const [errores,setErrores] = useState([]);
   const [registroExitoso, setRegistroExitoso] = useState(false); // Nuevo estado
+  const [isLoading, setIsLoading] = useState(false);
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    setIsLoading(true);
     try {
       await handleRegister({name,email,password,password_confirmation});
       setRegistroExitoso(true);
@@ -48,6 +50,8 @@ export default function Register() {
           Object.values({ error: "No se pudo conectar con el servidor." })
         );
       }
+    } finally {
+      setIsLoading(false);
     }
 
   }
@@ -124,8 +128,9 @@ export default function Register() {
           </div>
           <input
             type="submit"
-            value="Crear Cuenta"
-            className="bg-indigo-600 hover:bg-indigo-800 text-white w-full mt-5 p-3 uppercase font-bold cursor-pointer transition-colors"
+            value={isLoading ? "Creando Cuenta..." : "Crear Cuenta"}
+            disabled={isLoading}
+            className="bg-indigo-600 hover:bg-indigo-800 text-white w-full mt-5 p-3 uppercase font-bold cursor-pointer transition-colors disabled:bg-indigo-400"
           />
         </form>
         <AuthGoogle></AuthGoogle>

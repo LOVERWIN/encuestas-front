@@ -6,16 +6,20 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
+    setIsLoading(true);
     try {
       const res = await forgotPassword(email);
       setMessage(res.data.message);
-    } catch (err) {
+    } catch {
       setError('No se encontró un usuario con ese correo.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -33,7 +37,12 @@ export default function ForgotPassword() {
             <label>Email:</label>
             <input type="email" placeholder="Tu email" onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full p-3 bg-gray-50"/>
           </div>
-          <input type="submit" value="Enviar Enlace" className="bg-indigo-600 hover:bg-indigo-800 text-white w-full mt-5 p-3 uppercase font-bold cursor-pointer"/>
+          <input 
+            type="submit" 
+            value={isLoading ? 'Enviando...' : 'Enviar Enlace'} 
+            disabled={isLoading || message}
+            className="bg-indigo-600 hover:bg-indigo-800 text-white w-full mt-5 p-3 uppercase font-bold cursor-pointer disabled:bg-indigo-400"
+          />
         </form>
       </div>
     </>

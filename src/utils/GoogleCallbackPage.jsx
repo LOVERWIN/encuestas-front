@@ -1,11 +1,10 @@
 import { useEffect } from "react";
-import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
 
 export default function GoogleCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation(); // Para recordar a dónde volver
   const { mutate,setToken } = useAuth(); // Obtenemos la función para revalidar de SWR
   const redirectTo = localStorage.getItem('redirect_after_login') || '/';
   useEffect(() => {
@@ -34,7 +33,7 @@ export default function GoogleCallbackPage() {
     };
 
     processToken();
-  }, []); // El useEffect en sí no puede ser async, por eso creamos una función interna.
+  }, [mutate, navigate, redirectTo, searchParams, setToken]); // El useEffect en sí no puede ser async, por eso creamos una función interna.
 
   // Mientras se procesa todo, mostramos un mensaje de carga
   return <p>Autenticando, por favor espera...</p>;

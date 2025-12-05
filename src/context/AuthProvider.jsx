@@ -12,7 +12,7 @@ const AuthContext = createContext();
 const AuthProvider = ({ children }) => {
 
   // 1. Usar useState para que el token sea reactivo
-  const [token, setToken] = useState(localStorage.getItem("AUTH_TOKEN"));
+  const [, setToken] = useState(localStorage.getItem("AUTH_TOKEN"));
   //const token = localStorage.getItem("AUTH_TOKEN");
   // Define el "fetcher" que SWR usará para obtener los datos
   const fetcher = (url) =>
@@ -28,7 +28,7 @@ const AuthProvider = ({ children }) => {
     error,
     mutate,
   } = useSWR(
-    localStorage.getItem("AUTH_TOKEN") ? "/api/user" : null, // <-- LA CLAVE DE LA OPTIMIZACIÓN
+    localStorage.getItem("AUTH_TOKEN") ? "/user" : null, // <-- LA CLAVE DE LA OPTIMIZACIÓN
     fetcher,
     {
       revalidateOnFocus: true,
@@ -37,38 +37,27 @@ const AuthProvider = ({ children }) => {
   );
 
   const handleLogin = useCallback (async (datos) => {
-    try {
-      const data = await loginService(datos);
-      localStorage.setItem("AUTH_TOKEN", data.token);
-      setToken(data.token);
-      console.log('desde metodologin: '+localStorage.getItem("AUTH_TOKEN"));
-      mutate();
-    } catch (error) {
-      throw error;
-    }
+    const response = await loginService(datos);
+    localStorage.setItem("AUTH_TOKEN", response.data.token);
+    setToken(response.data.token);
+    console.log('desde metodologin: '+localStorage.getItem("AUTH_TOKEN"));
+    mutate();
   },[mutate]);
 
  const handleRegister = async (datos) => {
-    try {
-      // Llamamos al servicio, pero ya no guardamos token ni hacemos mutate.
-      // Solo nos interesa saber si la petición fue exitosa.
-      const response = await registerService(datos);
-      return response; // Devuelve el mensaje de éxito (ej. "¡Registro exitoso!...")
-    } catch (error) {
-      // Si hay un error de validación, lo lanzamos para que el formulario lo muestre.
-      throw error;
-    }
+    const response = await registerService(datos);
+    return response.data;
   };
 
   const handleLogout = useCallback (async () => {
-    try {
-      await logoutService();
-      localStorage.removeItem("AUTH_TOKEN");
-      setToken(null);
-      mutate(null);
-    } catch (error) {
-      throw error;
-    }
+    await logoutService();
+    localStorage.removeItem("AUTH_TOKEN");
+    localStorage.removeItem('redirect_after_login');
+    localStorage.setItem('logged_out_flag', 'true');
+    setToken(null);
+    sessionStorage.removeItem('chatSessionId');
+    sessionStorage.removeItem('chatMessages');
+    mutate(null);
   },[mutate]);
 
   return (

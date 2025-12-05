@@ -4,7 +4,7 @@
 
 @media print {
   @page {
-    size: landscape;
+    size: vertical;
   }
   /* Esconde todo por defecto */
   body * {
@@ -21,4 +21,165 @@
     top: 0;
     width: 100%;
   }
+}
+
+:root {
+  --chat-bg-color: #f4f7f6;
+  --chat-header-bg: #4a90e2; /* Azul */
+  --chat-header-text: #ffffff;
+  
+  --user-bubble-bg: #4a90e2; /* Azul */
+  --user-bubble-text: #ffffff;
+  
+  --bot-bubble-bg: #e5e5ea; /* Gris claro */
+  --bot-bubble-text: #000000;
+  
+  --input-bg-color: #ffffff;
+  --input-text-color: #000000;
+  --button-bg-color: #4a90e2;
+  --button-text-color: #ffffff;
+}
+/* ------------------------------------------- */
+
+
+/* Contenedor principal del chat */
+.chat-widget-container {
+  /* Posición (ej. fijo en la esquina) */
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  
+  /* Tamaño */
+  width: 370px;
+  height: 600px;
+  max-height: 80vh;
+
+  /* Estilo */
+  background-color: var(--chat-bg-color);
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+
+  /* Layout */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Encabezado */
+.chat-header {
+  background: var(--chat-header-bg);
+  color: var(--chat-header-text);
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+}
+
+.chat-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+/* Lista de mensajes */
+.message-list {
+  flex-grow: 1; /* Ocupa todo el espacio disponible */
+  overflow-y: auto; /* Permite scroll */
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Estilo base para cada mensaje (la fila) */
+.message {
+  display: flex;
+  margin-bottom: 0.5rem;
+}
+
+.message-bubble {
+  padding: 0.75rem 1rem;
+  border-radius: 18px;
+  line-height: 1.4;
+  max-width: 80%; /* Evita que la burbuja ocupe toda la fila */
+}
+
+/* Mensajes del usuario (derecha) */
+.message.user {
+  justify-content: flex-end; /* Alinea a la derecha */
+}
+.message.user .message-bubble {
+  background-color: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
+  border-bottom-right-radius: 4px; /* Estilo "burbuja" */
+}
+
+/* Mensajes del bot (izquierda) */
+.message.bot {
+  justify-content: flex-start; /* Alinea a la izquierda */
+}
+.message.bot .message-bubble {
+  background-color: var(--bot-bubble-bg);
+  color: var(--bot-bubble-text);
+  border-bottom-left-radius: 4px; /* Estilo "burbuja" */
+}
+
+/* Formulario de envío */
+.message-form {
+  display: flex;
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  background-color: #fff;
+}
+
+.message-form input {
+  flex-grow: 1;
+  border: 1px solid #ccc;
+  padding: 0.75rem;
+  border-radius: 20px;
+  font-size: 1rem;
+  background-color: var(--input-bg-color);
+  color: var(--input-text-color);
+}
+
+.message-form button {
+  border: none;
+  background-color: var(--button-bg-color);
+  color: var(--button-text-color);
+  padding: 0.75rem 1rem;
+  border-radius: 20px;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+}
+
+.message-form button:hover {
+  opacity: 0.9;
+}
+.message-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Animación "escribiendo..." */
+.typing-indicator {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+}
+.typing-indicator span {
+  height: 8px;
+  width: 8px;
+  background-color: #999;
+  border-radius: 50%;
+  display: inline-block;
+  margin: 0 2px;
+  animation: bounce 1.3s infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-4px); }
 }
