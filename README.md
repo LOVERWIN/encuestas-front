@@ -82,7 +82,7 @@ encuestas-react/
 │   ├── App.jsx            # Componente raíz
 │   ├── main.jsx           # Punto de entrada de la app
 │   └── router.jsx         # Definición de rutas
-├── .env.production        # Variables de entorno para producción
+├── .env.example           # Variables de entorno example
 ├── .eslintrc.cjs          # Configuración de ESLint
 ├── tailwind.config.js     # Configuración de Tailwind CSS
 ├── vite.config.js         # Configuración de Vite
